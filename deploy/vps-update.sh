@@ -8,7 +8,7 @@
 # usage: bash vps-update.sh [github-token-if-repo-private]
 set -euo pipefail
 
-REPO="rameezimdad/baileys-api"
+REPO="yolopment/whatsappapi"
 APP_DIR=/opt/baileys-api
 TOKEN="${1:-}"
 
@@ -20,7 +20,7 @@ AUTH=()
 [ -n "$TOKEN" ] && AUTH=(-H "Authorization: Bearer $TOKEN")
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-curl -fsSL "${AUTH[@]}" "https://codeload.github.com/$REPO/tar.gz/refs/heads/master" \
+curl -fsSL "${AUTH[@]}" "https://codeload.github.com/$REPO/tar.gz/refs/heads/main" \
   | tar xz --strip-components=1 -C "$TMP"
 
 echo ">>> [2/4] applying update (keeping .env, data, logs)"

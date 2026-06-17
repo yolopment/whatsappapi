@@ -8,7 +8,7 @@
 #   --fresh = wipe any old install first (new admin key, new WhatsApp session)
 set -euo pipefail
 
-REPO="rameezimdad/baileys-api"
+REPO="yolopment/whatsappapi"
 APP_DIR=/opt/baileys-api
 FRESH=0
 TOKEN=""
@@ -39,7 +39,7 @@ echo ">>> [3/7] download app"
 mkdir -p "$APP_DIR"
 AUTH=()
 [ -n "$TOKEN" ] && AUTH=(-H "Authorization: Bearer $TOKEN")
-curl -fsSL "${AUTH[@]}" "https://codeload.github.com/$REPO/tar.gz/refs/heads/master" \
+curl -fsSL "${AUTH[@]}" "https://codeload.github.com/$REPO/tar.gz/refs/heads/main" \
   | tar xz --strip-components=1 -C "$APP_DIR"
 cd "$APP_DIR"
 

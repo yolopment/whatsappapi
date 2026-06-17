@@ -46,7 +46,7 @@ This repo is **private**, so cloning needs a GitHub token. Two options:
 On github.com → this repo → Settings → scroll down → "Change visibility" → make **Public**. Then on the VPS:
 
 ```bash
-git clone https://github.com/rameezimdad/baileys-api.git
+git clone https://github.com/yolopment/whatsappapi.git
 ```
 
 After install finishes, set the repo back to **Private** the same way.
@@ -55,7 +55,7 @@ After install finishes, set the repo back to **Private** the same way.
 github.com → your avatar → Settings → Developer settings → Personal access tokens → Generate new token (classic, `repo` scope). Then:
 
 ```bash
-git clone https://YOUR_TOKEN@github.com/rameezimdad/baileys-api.git
+git clone https://YOUR_TOKEN@github.com/yolopment/whatsappapi.git
 ```
 
 ---
@@ -299,10 +299,10 @@ Now use `https://yourdomain.com/api/...` in your apps.
 cd /opt/baileys-api
 ```
 ```bash
-git -C ~/baileys-api pull
+git -C ~/whatsappapi pull
 ```
 ```bash
-cp -r ~/baileys-api/. /opt/baileys-api/
+cp -r ~/whatsappapi/. /opt/baileys-api/
 ```
 ```bash
 npm ci --omit=dev && pm2 restart baileys-api

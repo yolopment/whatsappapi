@@ -8,7 +8,7 @@
 # Run it, send the printed key to your developer, then run it again to finish.
 set -euo pipefail
 
-REPO_SSH="git@github.com:rameezimdad/baileys-api.git"
+REPO_SSH="git@github.com:yolopment/whatsappapi.git"
 APP=/opt/baileys-api
 KEY="$HOME/.ssh/id_github"
 
@@ -37,17 +37,17 @@ cd "$APP"
 [ -d .git ] || git init -q
 git remote remove origin 2>/dev/null || true
 git remote add origin "$REPO_SSH"
-git fetch origin master -q
-git reset --hard origin/master          # .env, data/, logs/, node_modules/ are gitignored — preserved
-git branch -M master 2>/dev/null || true
-git branch --set-upstream-to=origin/master master 2>/dev/null || true
+git fetch origin main -q
+git reset --hard origin/main          # .env, data/, logs/, node_modules/ are gitignored — preserved
+git branch -M main 2>/dev/null || true
+git branch --set-upstream-to=origin/main main 2>/dev/null || true
 
 echo ">>> deps + restart"
 npm ci --omit=dev --no-audit --no-fund
 pm2 restart baileys-api --update-env
 
 grep -q "alias wa-update" "$HOME/.bashrc" 2>/dev/null || \
-  echo "alias wa-update='cd /opt/baileys-api && git fetch origin master -q && git reset --hard origin/master && npm ci --omit=dev --no-audit --no-fund && pm2 restart baileys-api --update-env && echo && curl -s http://127.0.0.1:3000/healthz && echo'" >> "$HOME/.bashrc"
+  echo "alias wa-update='cd /opt/baileys-api && git fetch origin main -q && git reset --hard origin/main && npm ci --omit=dev --no-audit --no-fund && pm2 restart baileys-api --update-env && echo && curl -s http://127.0.0.1:3000/healthz && echo'" >> "$HOME/.bashrc"
 
 sleep 2
 echo -n ">>> health: "; curl -s http://127.0.0.1:3000/healthz; echo
