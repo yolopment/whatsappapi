@@ -480,6 +480,7 @@
   <ul class="sb-menu">
     <li class="sec">Navigation</li>
     <li><button data-page="dashboard" class="active"><i class="fa-solid fa-gauge-high"></i><span>Dashboard</span></button></li>
+    <li><button data-page="accounts"><i class="fa-solid fa-users-gear"></i><span>Accounts</span></button></li>
     <li><button data-page="queue"><i class="fa-solid fa-hourglass-half"></i><span>Message Queue</span><span class="sb-badge hidden" id="sbQueueBadge">0</span></button></li>
     <li><button data-page="docs"><i class="fa-solid fa-book"></i><span>API Docs</span></button></li>
     <li><button data-page="keys"><i class="fa-solid fa-key"></i><span>API Keys</span></button></li>
@@ -556,6 +557,7 @@
         <div class="card">
           <div class="card-head">
             <i class="fa-brands fa-whatsapp"></i> WhatsApp Connection
+            <select id="dashboardSessionSelect" class="nav-btn" style="padding: 4px 10px; font-size:13px; margin-left:14px; background:#fff; color:var(--navy); font-weight:600; border:1px solid var(--line); border-radius:6px;"></select>
             <span class="right" id="keyWho"></span>
           </div>
           <div class="card-body">
@@ -620,6 +622,10 @@
                   <input type="text" id="testTo" placeholder="923001234567" inputmode="numeric">
                 </div>
                 <div class="field" style="margin:0">
+                  <label><i class="fa-solid fa-mobile-screen"></i> Sender Account</label>
+                  <select id="testSessionSelect" style="width:100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; height: 42px; background:#fff; font-size:14px; color:var(--ink);"></select>
+                </div>
+                <div class="field" style="margin:0">
                   <label><i class="fa-solid fa-message"></i> Message</label>
                   <input type="text" id="testMsg" placeholder="Hello from my API!" maxlength="4096">
                 </div>
@@ -629,9 +635,15 @@
 
             <!-- Bulk Send Form -->
             <div id="formBulkSend" class="hidden">
-              <div class="field" style="margin-bottom: 14px;">
-                <label><i class="fa-solid fa-users"></i> Recipients (one number per line, country code, no +)</label>
-                <textarea id="bulkTo" rows="5" placeholder="923001234567&#10;923019876543" style="width:100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; resize: vertical; min-height: 100px; font-family: inherit;"></textarea>
+              <div style="display: flex; gap: 16px; margin-bottom: 14px; flex-wrap: wrap;">
+                <div class="field" style="margin:0; flex: 1;">
+                  <label><i class="fa-solid fa-mobile-screen"></i> Sender Account</label>
+                  <select id="bulkSessionSelect" style="width:100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background:#fff; height: 42px; font-size:14px; color:var(--ink);"></select>
+                </div>
+                <div class="field" style="margin:0; flex: 1;">
+                  <label><i class="fa-solid fa-users"></i> Recipients (one number per line)</label>
+                  <textarea id="bulkTo" rows="1" placeholder="923001234567&#10;923019876543" style="width:100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; resize: vertical; min-height: 42px; font-family: inherit; height: 42px;"></textarea>
+                </div>
               </div>
               
               <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 18px; flex-wrap: wrap;">
@@ -664,6 +676,7 @@
         <div class="card">
           <div class="card-head">
             <i class="fa-solid fa-hourglass-half"></i> Message Queue &amp; History
+            <select id="queueSessionSelect" class="nav-btn" style="padding: 4px 10px; font-size:12px; margin-left:14px; background:#fff; color:var(--navy); font-weight:600; border:1px solid var(--line); border-radius:6px;"></select>
             <span class="right" id="qRefreshed">auto-refreshes every 4s</span>
           </div>
           <div class="card-body">
@@ -679,7 +692,7 @@
             </div></div>
             <div style="overflow-x:auto">
               <table class="q-table">
-                <thead><tr><th>#</th><th>Type</th><th>Recipient</th><th>Message</th><th>Status</th><th>Time</th></tr></thead>
+                <thead><tr><th>#</th><th>Type</th><th>Account</th><th>Recipient</th><th>Message</th><th>Status</th><th>Time</th></tr></thead>
                 <tbody id="qBody"><tr><td colspan="6" class="q-empty"><i class="fa-solid fa-inbox"></i>Loading…</td></tr></tbody>
               </table>
             </div>
@@ -834,6 +847,63 @@
         </div>
       </div>
 
+      <!-- ============ PAGE: accounts ============ -->
+      <div class="page" id="page-accounts">
+        <div class="card">
+          <div class="card-head">
+            <i class="fa-solid fa-users-gear"></i> WhatsApp Accounts
+            <span class="right" id="accRefreshed">auto-refreshes every 4s</span>
+          </div>
+          <div class="card-body">
+            <div class="note-strip" style="margin-bottom:18px">
+              <i class="fa-solid fa-circle-info"></i>
+              <div>
+                You can link multiple WhatsApp numbers by creating separate sessions. Each session has its own connection, database auth keys, and independent rate limits/throttling.
+              </div>
+            </div>
+            
+            <div style="overflow-x:auto; margin-bottom: 24px;">
+              <table class="key-table">
+                <thead><tr><th>Session ID</th><th>Connected Number</th><th>Status</th><th>Queue</th><th>Actions</th></tr></thead>
+                <tbody id="accountsTableBody">
+                  <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">Loading accounts…</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="h-sub"><i class="fa-solid fa-plus"></i> Add New WhatsApp Account</div>
+            <div class="gen-row">
+              <div class="field" style="margin:0">
+                <input type="text" id="newSessionId" placeholder="e.g. sales-team, marketing" maxlength="50">
+              </div>
+              <button class="btn" id="btnAddSession"><i class="fa-solid fa-bolt"></i> Create Session</button>
+            </div>
+            <div id="addSessionResult"></div>
+          </div>
+        </div>
+
+        <!-- QR Display Card (Shown when scanning a session) -->
+        <div class="card hidden" id="sessionQrCard">
+          <div class="card-head">
+            <i class="fa-solid fa-qrcode"></i> Scan QR for Session: <span id="scanSessionName"></span>
+            <button class="copy-mini" id="btnCloseQrCard" style="margin-left: auto;"><i class="fa-solid fa-xmark"></i> Close</button>
+          </div>
+          <div class="card-body" style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+            <div class="qr-frame" id="sessionQrFrame">
+              <img id="sessionQrImg" alt="WhatsApp QR code">
+              <div class="qr-expired-overlay"><i class="fa-solid fa-rotate-right fa-2x"></i> Refreshing QR…</div>
+            </div>
+            <div class="qr-meta" id="sessionQrMeta">QR refreshes automatically</div>
+            <div class="qr-steps" style="max-width: 480px;">
+              <div><i class="fa-brands fa-whatsapp"></i> Open <b>WhatsApp</b> on your phone</div>
+              <div><i class="fa-solid fa-gear"></i> Go to <b>Settings &rarr; Linked devices</b></div>
+              <div><i class="fa-solid fa-link"></i> Tap <b>Link a device</b></div>
+              <div><i class="fa-solid fa-camera"></i> Point the camera at this QR code</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </section>
 
   </main>
@@ -862,6 +932,11 @@
   let qrBusy = false;
   let pollTimer = null;
   let apiBuilt = false;
+  let currentSessionId = 'main';
+  let sessionsList = [];
+  let scanSessionId = '';
+  let scanQrTimer = null;
+  let scanQrExpiresAt = 0;
 
   const api = async (path, opts = {}) => {
     const headers = { 'x-api-key': key, ...(opts.headers || {}) };
@@ -876,6 +951,7 @@
   // ---- sidebar + pages ----
   const PAGES = {
     dashboard: { icon: 'fa-gauge-high',     title: 'Dashboard' },
+    accounts:  { icon: 'fa-users-gear',     title: 'WhatsApp Accounts' },
     queue:     { icon: 'fa-hourglass-half', title: 'Message Queue' },
     docs:      { icon: 'fa-book',           title: 'API Docs' },
     keys:      { icon: 'fa-key',            title: 'API Keys' }
@@ -890,6 +966,7 @@
     document.body.classList.remove('sb-open');
     if (name === 'docs' && !apiBuilt) buildDocs();
     if (name === 'queue') startQueuePoll(); else stopQueuePoll();
+    if (name === 'accounts') renderAccountsTable();
     window.scrollTo({ top: 0 });
   };
 
@@ -969,17 +1046,191 @@
 
   const gapText = s => s.queueGapMs ? Math.round(s.queueGapMs.min / 1000) + '–' + Math.round(s.queueGapMs.max / 1000) + 's' : '5–9s';
 
+  const fetchSessions = async () => {
+    try {
+      const { res, json } = await api('/api/sessions');
+      if (res.ok && json.success) {
+        sessionsList = json.data || [];
+        updateSessionDropdowns();
+        if (document.getElementById('page-accounts').classList.contains('active')) {
+          renderAccountsTable();
+        }
+      }
+    } catch {}
+  };
+
+  const updateSessionDropdowns = () => {
+    const optionsHtml = sessionsList.map(s => {
+      const label = s.sessionId + (s.user ? ' (' + s.user.split('@')[0] + ')' : ' (disconnected)');
+      return '<option value="' + s.sessionId + '">' + esc(label) + '</option>';
+    }).join('');
+    
+    const prevDashboardVal = $('dashboardSessionSelect').value;
+    $('dashboardSessionSelect').innerHTML = optionsHtml;
+    if (sessionsList.some(s => s.sessionId === prevDashboardVal)) {
+      $('dashboardSessionSelect').value = prevDashboardVal;
+    } else {
+      $('dashboardSessionSelect').value = currentSessionId;
+    }
+    
+    const prevTestVal = $('testSessionSelect').value;
+    $('testSessionSelect').innerHTML = optionsHtml;
+    if (sessionsList.some(s => s.sessionId === prevTestVal)) {
+      $('testSessionSelect').value = prevTestVal;
+    }
+    
+    const prevBulkVal = $('bulkSessionSelect').value;
+    $('bulkSessionSelect').innerHTML = optionsHtml;
+    if (sessionsList.some(s => s.sessionId === prevBulkVal)) {
+      $('bulkSessionSelect').value = prevBulkVal;
+    }
+
+    const prevQueueVal = $('queueSessionSelect').value;
+    $('queueSessionSelect').innerHTML = '<option value="">All Accounts</option>' + optionsHtml;
+    if (prevQueueVal === '' || sessionsList.some(s => s.sessionId === prevQueueVal)) {
+      $('queueSessionSelect').value = prevQueueVal;
+    }
+  };
+
+  $('dashboardSessionSelect').onchange = (e) => {
+    currentSessionId = e.target.value;
+    tick();
+  };
+
+  $('queueSessionSelect').onchange = () => {
+    loadQueue();
+  };
+
+  const renderAccountsTable = () => {
+    $('accountsTableBody').innerHTML = sessionsList.map(s => {
+      const statusClass = s.connected ? 'ok' : 'rev';
+      const statusText = s.connected ? 'Connected' : s.status;
+      const connectedNum = s.user ? s.user.split('@')[0] : '—';
+      const qrBtn = s.connected ? '' : '<button class="kbtn" style="background:var(--blue); margin-right: 6px;" onclick="showSessionQr(\'' + s.sessionId + '\')"><i class="fa-solid fa-qrcode"></i> Scan QR</button>';
+      const logoutBtn = s.connected ? '<button class="kbtn danger" style="margin-right: 6px;" onclick="logoutSession(\'' + s.sessionId + '\')"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>' : '';
+      const deleteBtn = s.sessionId === 'main' ? '' : '<button class="kbtn danger" onclick="deleteSession(\'' + s.sessionId + '\')"><i class="fa-solid fa-trash"></i> Delete</button>';
+      
+      return '<tr>' +
+        '<td><b>' + esc(s.sessionId) + '</b></td>' +
+        '<td>' + esc(connectedNum) + '</td>' +
+        '<td><span class="kbadge ' + statusClass + '">' + statusText + '</span></td>' +
+        '<td>' + (s.pendingMessages || 0) + ' pending</td>' +
+        '<td>' + qrBtn + logoutBtn + deleteBtn + '</td>' +
+        '</tr>';
+    }).join('');
+  };
+
+  let scanSessionId = '';
+  let scanQrTimer = null;
+  let scanQrExpiresAt = 0;
+
+  window.showSessionQr = (sessionId) => {
+    scanSessionId = sessionId;
+    $('scanSessionName').textContent = sessionId;
+    show($('sessionQrCard'));
+    $('sessionQrCard').scrollIntoView({ behavior: 'smooth' });
+    pollSessionQr();
+  };
+
+  const pollSessionQr = async () => {
+    clearTimeout(scanQrTimer);
+    if (!scanSessionId || $('sessionQrCard').classList.contains('hidden')) return;
+    try {
+      const { res, json } = await api('/api/qr?sessionId=' + scanSessionId);
+      if (res.status === 409) {
+        hide($('sessionQrCard'));
+        fetchSessions();
+        return;
+      }
+      if (res.ok && json.data?.dataUrl) {
+        $('sessionQrImg').src = json.data.dataUrl;
+        scanQrExpiresAt = Date.parse(json.data.expiresAt) || (Date.now() + 60000);
+        $('sessionQrFrame').classList.remove('expired');
+      }
+    } catch {}
+    
+    scanQrTimer = setTimeout(pollSessionQr, 4000);
+  };
+
+  window.logoutSession = async (sessionId) => {
+    if (!confirm('Logout session "' + sessionId + '"?')) return;
+    try {
+      const { res } = await api('/api/logout?sessionId=' + sessionId, { method: 'POST' });
+      if (res.ok) fetchSessions();
+    } catch {}
+  };
+
+  window.deleteSession = async (sessionId) => {
+    if (!confirm('Delete session "' + sessionId + '"? This will erase all its WhatsApp authentication data.')) return;
+    try {
+      const { res } = await api('/api/sessions/' + sessionId, { method: 'DELETE' });
+      if (res.ok) {
+        if (currentSessionId === sessionId) currentSessionId = 'main';
+        fetchSessions();
+        hide($('sessionQrCard'));
+      }
+    } catch {}
+  };
+
+  $('btnCloseQrCard').onclick = () => {
+    hide($('sessionQrCard'));
+    scanSessionId = '';
+    clearTimeout(scanQrTimer);
+  };
+
+  $('btnAddSession').onclick = async () => {
+    const idInput = $('newSessionId');
+    const sessionId = idInput.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (sessionId.length < 2) {
+      alert('Session ID must be at least 2 alphanumeric characters.');
+      return;
+    }
+    const btn = $('btnAddSession');
+    btn.disabled = true;
+    try {
+      const { res, json } = await api('/api/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId })
+      });
+      if (res.ok) {
+        idInput.value = '';
+        await fetchSessions();
+        window.showSessionQr(sessionId);
+      } else {
+        alert(json.error || 'Failed to create session');
+      }
+    } catch {
+      alert('Failed to connect to server');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  // countdown on the Accounts QR caption
+  setInterval(() => {
+    if ($('sessionQrCard').classList.contains('hidden') || !scanSessionId) return;
+    const left = Math.max(0, Math.round((scanQrExpiresAt - Date.now()) / 1000));
+    $('sessionQrMeta').innerHTML = left > 0
+      ? '<i class="fa-solid fa-clock"></i> QR expires in <b>' + left + 's</b> — auto-refreshes'
+      : 'Getting a fresh QR…';
+    if (left <= 0) $('sessionQrFrame').classList.add('expired');
+  }, 1000);
+
   const render = async status => {
     // KPI + sidebar badge updates on every poll
+    const connectedCount = sessionsList.filter(s => s.connected).length;
+    $('kpiConn').textContent = connectedCount + ' / ' + sessionsList.length + ' Connected';
+    $('kpiConnBox').className = 'small-box ' + (connectedCount > 0 ? 'sb-green' : 'sb-red');
+    $('kpiConnFoot').textContent = connectedCount + ' active account(s)';
+
+    const totalPending = sessionsList.reduce((sum, s) => sum + (s.pendingMessages || 0), 0);
+    $('kpiQueue').textContent = totalPending;
+    $('sbQueueBadge').textContent = totalPending;
+    $('sbQueueBadge').classList.toggle('hidden', !totalPending);
+
     const pending = status.pendingMessages || 0;
-    $('kpiQueue').textContent = pending;
-    $('sbQueueBadge').textContent = pending;
-    $('sbQueueBadge').classList.toggle('hidden', !pending);
     if (status.dailyLimit) $('kpiQueueFoot').textContent = 'today: ' + (status.sentToday || 0) + ' / ' + status.dailyLimit + ' daily limit';
     $('kpiGap').textContent = gapText(status);
-    $('kpiConn').textContent = status.connected ? 'Online' : (status.status === 'qr_ready' ? 'Scan QR' : status.status);
-    $('kpiConnBox').className = 'small-box ' + (status.connected ? 'sb-green' : 'sb-red');
-    $('kpiConnFoot').textContent = status.connected ? (status.user || 'linked device') : 'not connected';
 
     if (status.connected) {
       showState('stateConnected');
@@ -1015,7 +1266,7 @@
     if (qrExpiresAt - Date.now() > 8000 && !$('qrFrame').classList.contains('expired')) return; // current QR still fresh
     qrBusy = true;
     try {
-      const { res, json } = await api('/api/qr');
+      const { res, json } = await api('/api/qr?sessionId=' + currentSessionId);
       if (res.status === 409) return;       // connected meanwhile
       if (!res.ok || !json.data?.dataUrl) return; // not ready yet, next tick retries
       $('qrImg').src = json.data.dataUrl;
@@ -1040,7 +1291,8 @@
   const tick = async () => {
     clearTimeout(pollTimer);
     try {
-      const { json } = await api('/api/status');
+      await fetchSessions();
+      const { json } = await api('/api/status?sessionId=' + currentSessionId);
       if (json.success) await render(json.data);
     } catch (e) { if (e.message === 'AUTH') return; }
     pollTimer = setTimeout(tick, 4000);
@@ -1059,7 +1311,8 @@
 
   const loadQueue = async () => {
     try {
-      const { res, json } = await api('/api/messages?limit=100' + (qStatus ? '&status=' + qStatus : ''));
+      const qSession = $('queueSessionSelect').value;
+      const { res, json } = await api('/api/messages?limit=100' + (qStatus ? '&status=' + qStatus : '') + (qSession ? '&sessionId=' + qSession : ''));
       if (!res.ok || !json.success) return;
       const { counts, messages } = json.data;
       const c = s => counts[s] || 0;
@@ -1075,13 +1328,14 @@
         return '<tr>' +
           '<td>' + (pos || '<span style="color:var(--line)">—</span>') + '</td>' +
           '<td><span class="tico" title="' + m.type + '"><i class="fa-solid ' + ico + '"></i></span></td>' +
+          '<td><code>' + esc(m.sessionId || 'main') + '</code></td>' +
           '<td class="rcpt">' + esc(m.recipient.replace('@s.whatsapp.net', '')) + '</td>' +
           '<td class="prev" title="' + esc(m.preview) + '">' + (esc(m.preview) || '<i style="color:var(--line)">media</i>') +
             (m.error ? '<span class="err"><i class="fa-solid fa-circle-exclamation"></i> ' + esc(m.error) + '</span>' : '') + '</td>' +
           '<td><span class="mbadge ' + m.status + '">' + m.status + '</span></td>' +
           '<td class="tm">' + mTime(m.createdAt) + '</td>' +
           '</tr>';
-      }).join('') : '<tr><td colspan="6" class="q-empty"><i class="fa-solid fa-inbox"></i>No messages ' + (qStatus ? 'with status "' + qStatus + '"' : 'yet') + '</td></tr>';
+      }).join('') : '<tr><td colspan="7" class="q-empty"><i class="fa-solid fa-inbox"></i>No messages ' + (qStatus ? 'with status "' + qStatus + '"' : 'yet') + '</td></tr>';
       $('qRefreshed').textContent = 'updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     } catch (e) { /* AUTH handled in api(); transient errors retry next poll */ }
   };
@@ -1359,7 +1613,8 @@
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-circle-notch spin"></i> Sending…';
     try {
-      const { res, json } = await api('/api/send-message', { method: 'POST', body: JSON.stringify({ to, message }) });
+      const sessionId = $('testSessionSelect').value;
+      const { res, json } = await api('/api/send-message', { method: 'POST', body: JSON.stringify({ to, message, sessionId }) });
       const okay = res.ok && json.success;
       alertBox.classList.add('show', okay ? 'okay' : 'error');
       $('sendAlertIcon').className = okay ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-exclamation';
@@ -1454,11 +1709,12 @@
     let successCount = 0;
     let failCount = 0;
 
+    const sessionId = $('bulkSessionSelect').value;
     for (let i = 0; i < recipients.length; i++) {
       const to = recipients[i];
       btn.innerHTML = '<i class="fa-solid fa-circle-notch spin"></i> Queuing ' + (i + 1) + ' / ' + recipients.length + '…';
       try {
-        const { res, json } = await api('/api/send-message', { method: 'POST', body: JSON.stringify({ to, message }) });
+        const { res, json } = await api('/api/send-message', { method: 'POST', body: JSON.stringify({ to, message, sessionId }) });
         if (res.ok && json.success) {
           successCount++;
         } else {

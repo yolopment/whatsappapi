@@ -9,10 +9,11 @@ import { BufferJSON } from 'baileys'
 
 export class MessageRepository {
   constructor(db) {
+    this.db = db
     this.insert = db.prepare(`
       INSERT INTO messages
-        (id, recipient, type, payload_json, status, api_key_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
+        (id, recipient, type, payload_json, status, api_key_id, session_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?)
     `)
     this.sent = db.prepare(`
       UPDATE messages SET wa_message_id = ?, message_json = ?, status = 'sent', updated_at = ?
@@ -22,18 +23,7 @@ export class MessageRepository {
       UPDATE messages SET status = 'failed', error = ?, updated_at = ? WHERE id = ?
     `)
     this.findMessage = db.prepare('SELECT message_json FROM messages WHERE wa_message_id = ?')
-    this.sinceCount = db.prepare(`SELECT COUNT(*) AS n FROM messages WHERE created_at >= ? AND status != 'failed'`)
-
-    // queue page: queued drains FIFO (ASC), history newest first (DESC)
-    const COLS = 'id, wa_message_id, recipient, type, payload_json, status, error, api_key_id, created_at, updated_at'
-    this.listQ = {
-      all: db.prepare(`SELECT ${COLS} FROM messages ORDER BY created_at DESC LIMIT ?`),
-      status: db.prepare(`SELECT ${COLS} FROM messages WHERE status = ? ORDER BY CASE WHEN status = 'queued' THEN created_at END ASC, created_at DESC LIMIT ?`),
-      key: db.prepare(`SELECT ${COLS} FROM messages WHERE api_key_id = ? ORDER BY created_at DESC LIMIT ?`),
-      keyStatus: db.prepare(`SELECT ${COLS} FROM messages WHERE api_key_id = ? AND status = ? ORDER BY CASE WHEN status = 'queued' THEN created_at END ASC, created_at DESC LIMIT ?`)
-    }
-    this.countsAll = db.prepare('SELECT status, COUNT(*) AS n FROM messages GROUP BY status')
-    this.countsKey = db.prepare('SELECT status, COUNT(*) AS n FROM messages WHERE api_key_id = ? GROUP BY status')
+    this.sinceCount = db.prepare(`SELECT COUNT(*) AS n FROM messages WHERE session_id = ? AND created_at >= ? AND status != 'failed'`)
   }
 
   preview(row) {
@@ -44,10 +34,38 @@ export class MessageRepository {
     } catch { return '' }
   }
 
-  list({ status = null, apiKeyId = null, limit = 50 } = {}) {
-    const rows = apiKeyId
-      ? (status ? this.listQ.keyStatus.all(apiKeyId, status, limit) : this.listQ.key.all(apiKeyId, limit))
-      : (status ? this.listQ.status.all(status, limit) : this.listQ.all.all(limit))
+  list({ status = null, apiKeyId = null, sessionId = null, limit = 50 } = {}) {
+    let sql = 'SELECT id, wa_message_id, recipient, type, payload_json, status, error, api_key_id, session_id, created_at, updated_at FROM messages'
+    const conds = []
+    const args = []
+    
+    if (apiKeyId) {
+      conds.push('api_key_id = ?')
+      args.push(apiKeyId)
+    }
+    if (sessionId) {
+      conds.push('session_id = ?')
+      args.push(sessionId)
+    }
+    if (status) {
+      conds.push('status = ?')
+      args.push(status)
+    }
+    
+    if (conds.length) {
+      sql += ' WHERE ' + conds.join(' AND ')
+    }
+    
+    if (status === 'queued') {
+      sql += ' ORDER BY created_at ASC'
+    } else {
+      sql += ' ORDER BY created_at DESC'
+    }
+    
+    sql += ' LIMIT ?'
+    args.push(limit)
+    
+    const rows = this.db.prepare(sql).all(...args)
     return rows.map(row => ({
       id: row.id,
       waMessageId: row.wa_message_id,
@@ -56,20 +74,39 @@ export class MessageRepository {
       preview: this.preview(row),
       status: row.status,
       error: row.error,
+      sessionId: row.session_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }))
   }
 
-  counts(apiKeyId = null) {
-    const rows = apiKeyId ? this.countsKey.all(apiKeyId) : this.countsAll.all()
+  counts(apiKeyId = null, sessionId = null) {
+    let sql = 'SELECT status, COUNT(*) AS n FROM messages'
+    const conds = []
+    const args = []
+    
+    if (apiKeyId) {
+      conds.push('api_key_id = ?')
+      args.push(apiKeyId)
+    }
+    if (sessionId) {
+      conds.push('session_id = ?')
+      args.push(sessionId)
+    }
+    
+    if (conds.length) {
+      sql += ' WHERE ' + conds.join(' AND ')
+    }
+    sql += ' GROUP BY status'
+    
+    const rows = this.db.prepare(sql).all(...args)
     return Object.fromEntries(rows.map(row => [row.status, row.n]))
   }
 
-  create({ recipient, type, payload, apiKeyId }) {
+  create({ recipient, type, payload, apiKeyId, sessionId = 'main' }) {
     const id = randomUUID()
     const now = new Date().toISOString()
-    this.insert.run(id, recipient, type, JSON.stringify(payload), apiKeyId === 'bootstrap' ? null : apiKeyId, now, now)
+    this.insert.run(id, recipient, type, JSON.stringify(payload), apiKeyId === 'bootstrap' ? null : apiKeyId, sessionId, now, now)
     return { id, status: 'queued', createdAt: now }
   }
 
@@ -88,8 +125,8 @@ export class MessageRepository {
     this.failed.run(String(error).slice(0, 1000), new Date().toISOString(), id)
   }
 
-  countSince(iso) {
-    return this.sinceCount.get(iso)?.n || 0
+  countSince(sessionId, iso) {
+    return this.sinceCount.get(sessionId, iso)?.n || 0
   }
 
   getContent(waMessageId) {

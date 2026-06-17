@@ -56,11 +56,12 @@ const schema = `
   );
 
   CREATE TABLE IF NOT EXISTS whatsapp_auth (
+    session_id TEXT NOT NULL DEFAULT 'main',
     category TEXT NOT NULL,
     id TEXT NOT NULL,
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    PRIMARY KEY (category, id)
+    PRIMARY KEY (session_id, category, id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_api_keys_prefix_active
@@ -87,7 +88,33 @@ export const createDatabase = file => {
   db.pragma('synchronous = NORMAL')
   db.pragma('foreign_keys = ON')
   db.pragma('busy_timeout = 5000')
+
+  // Migration for whatsapp_auth if needed (before running schema)
+  const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='whatsapp_auth'").get()
+  if (tableExists) {
+    const hasSessionId = db.prepare("PRAGMA table_info(whatsapp_auth)").all().some(row => row.name === 'session_id')
+    if (!hasSessionId) {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE whatsapp_auth RENAME TO whatsapp_auth_old;
+          CREATE TABLE whatsapp_auth (
+            session_id TEXT NOT NULL DEFAULT 'main',
+            category TEXT NOT NULL,
+            id TEXT NOT NULL,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (session_id, category, id)
+          );
+          INSERT INTO whatsapp_auth (session_id, category, id, value, updated_at)
+          SELECT 'main', category, id, value, updated_at FROM whatsapp_auth_old;
+          DROP TABLE whatsapp_auth_old;
+        `)
+      })()
+    }
+  }
+
   db.exec(schema)
   addColumnIfMissing(db, 'messages', 'message_json', 'TEXT')
+  addColumnIfMissing(db, 'messages', 'session_id', "TEXT NOT NULL DEFAULT 'main'")
   return db
 }

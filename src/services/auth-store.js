@@ -12,21 +12,21 @@ const CREDS_ID = 'main'
 export class SqliteAuthStore {
   constructor(db) {
     this.db = db
-    this.getOne = db.prepare('SELECT value FROM whatsapp_auth WHERE category = ? AND id = ?')
+    this.getOne = db.prepare('SELECT value FROM whatsapp_auth WHERE session_id = ? AND category = ? AND id = ?')
     this.upsert = db.prepare(`
-      INSERT INTO whatsapp_auth (category, id, value, updated_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(category, id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      INSERT INTO whatsapp_auth (session_id, category, id, value, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(session_id, category, id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `)
-    this.deleteOne = db.prepare('DELETE FROM whatsapp_auth WHERE category = ? AND id = ?')
-    this.clearAll = db.prepare('DELETE FROM whatsapp_auth')
+    this.deleteOne = db.prepare('DELETE FROM whatsapp_auth WHERE session_id = ? AND category = ? AND id = ?')
+    this.clearAll = db.prepare('DELETE FROM whatsapp_auth WHERE session_id = ?')
     this.writeBatch = db.transaction(entries => {
       const now = new Date().toISOString()
-      for (const [category, id, value] of entries) {
+      for (const [sessionId, category, id, value] of entries) {
         if (value === null || typeof value === 'undefined') {
-          this.deleteOne.run(category, id)
+          this.deleteOne.run(sessionId, category, id)
         } else {
-          this.upsert.run(category, id, JSON.stringify(value, BufferJSON.replacer), now)
+          this.upsert.run(sessionId, category, id, JSON.stringify(value, BufferJSON.replacer), now)
         }
       }
     })
@@ -36,8 +36,8 @@ export class SqliteAuthStore {
     return value ? JSON.parse(value, BufferJSON.reviver) : null
   }
 
-  load() {
-    const row = this.getOne.get(CREDS_CATEGORY, CREDS_ID)
+  load(sessionId = 'main') {
+    const row = this.getOne.get(sessionId, CREDS_CATEGORY, CREDS_ID)
     const creds = this.parse(row?.value) || initAuthCreds()
     const keys = {
       get: async (type, ids) => {
@@ -45,8 +45,8 @@ export class SqliteAuthStore {
         const placeholders = ids.map(() => '?').join(',')
         const rows = this.db.prepare(`
           SELECT id, value FROM whatsapp_auth
-          WHERE category = ? AND id IN (${placeholders})
-        `).all(type, ...ids)
+          WHERE session_id = ? AND category = ? AND id IN (${placeholders})
+        `).all(sessionId, type, ...ids)
 
         return Object.fromEntries(rows.map(row => {
           let value = this.parse(row.value)
@@ -60,23 +60,28 @@ export class SqliteAuthStore {
         const entries = []
         for (const [category, values] of Object.entries(data)) {
           for (const [id, value] of Object.entries(values || {})) {
-            entries.push([category, id, value])
+            entries.push([sessionId, category, id, value])
           }
         }
         this.writeBatch(entries)
       },
-      clear: async () => this.clear()
+      clear: async () => this.clear(sessionId)
     }
 
     return {
       state: { creds, keys },
       saveCreds: async () => {
-        this.writeBatch([[CREDS_CATEGORY, CREDS_ID, creds]])
+        this.writeBatch([[sessionId, CREDS_CATEGORY, CREDS_ID, creds]])
       }
     }
   }
 
-  clear() {
-    this.clearAll.run()
+  clear(sessionId = 'main') {
+    this.clearAll.run(sessionId)
+  }
+
+  listSessions() {
+    const rows = this.db.prepare('SELECT DISTINCT session_id FROM whatsapp_auth WHERE category = ? AND id = ?').all(CREDS_CATEGORY, CREDS_ID)
+    return rows.map(r => r.session_id)
   }
 }

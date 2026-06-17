@@ -17,12 +17,13 @@ import { normalizeRecipient } from '../utils/recipient.js'
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 const randBetween = (min, max) => max > min ? min + Math.floor(Math.random() * (max - min + 1)) : min
 
-export class WhatsAppService {
-  constructor({ authStore, messages, logs, logger, cfg }) {
+class WhatsAppSession {
+  constructor(sessionId, { authStore, messages, logs, logger, cfg }) {
+    this.sessionId = sessionId
     this.authStore = authStore
     this.messages = messages
     this.logs = logs
-    this.logger = logger.child({ module: 'whatsapp' }, { level: cfg.baileysLogLevel || 'warn' })
+    this.logger = logger.child({ module: 'whatsapp', sessionId }, { level: cfg.baileysLogLevel || 'warn' })
     this.cfg = cfg
     this.socket = null
     this.status = 'stopped'
@@ -51,7 +52,7 @@ export class WhatsAppService {
       .catch(error => {
         this.status = 'error'
         this.lastError = error.message
-        this.logs.write('error', 'whatsapp', 'connection start failed', { error: error.message })
+        this.logs.write('error', 'whatsapp', 'connection start failed', { error: error.message, sessionId: this.sessionId })
         this.scheduleReconnect(false)
         throw error
       })
@@ -64,14 +65,15 @@ export class WhatsAppService {
   async connect() {
     const generation = ++this.generation
     this.status = this.reconnectAttempts ? 'reconnecting' : 'connecting'
-    const { state, saveCreds } = this.authStore.load()
+    const { state, saveCreds } = this.authStore.load(this.sessionId)
     if (!this.version) {
       try {
         const latest = await fetchLatestBaileysVersion()
         this.version = latest.version
         this.logs.write('info', 'whatsapp', 'protocol version resolved', {
           version: this.version.join('.'),
-          isLatest: latest.isLatest
+          isLatest: latest.isLatest,
+          sessionId: this.sessionId
         })
       } catch (error) {
         this.logger.warn({ err: error }, 'protocol version lookup failed; using Baileys default')
@@ -81,7 +83,7 @@ export class WhatsAppService {
     const socket = makeWASocket({
       ...(this.version ? { version: this.version } : {}),
       logger: this.logger,
-      browser: Browsers.ubuntu('Rameez Baileys API'),
+      browser: Browsers.ubuntu(`Rameez Baileys API (${this.sessionId})`),
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, this.logger)
@@ -96,12 +98,11 @@ export class WhatsAppService {
     this.socket = socket
     socket.ev.on('creds.update', () => {
       if (generation === this.generation) saveCreds().catch(error => {
-        this.logs.write('error', 'whatsapp', 'credential save failed', { error: error.message })
+        this.logs.write('error', 'whatsapp', 'credential save failed', { error: error.message, sessionId: this.sessionId })
       })
     })
     socket.ev.on('connection.update', update => this.onConnectionUpdate(update, generation))
-    socket.ev.on('messages.upsert', () => {}) // send-only: inbound dropped, never stored
-    // fire-and-forget: delivery/read receipts are NOT tracked — send and move on
+    socket.ev.on('messages.upsert', () => {}) // send-only
   }
 
   onConnectionUpdate(update, generation) {
@@ -113,7 +114,7 @@ export class WhatsAppService {
       this.qrExpiresAt = new Date(Date.now() + this.cfg.qrTtlMs).toISOString()
       this.status = 'qr_ready'
       this.resolveQrWaiters()
-      this.logs.write('info', 'whatsapp', 'QR code generated', { expiresAt: this.qrExpiresAt })
+      this.logs.write('info', 'whatsapp', 'QR code generated', { expiresAt: this.qrExpiresAt, sessionId: this.sessionId })
     }
 
     if (connection === 'open') {
@@ -124,7 +125,7 @@ export class WhatsAppService {
       this.lastError = null
       this.reconnectAttempts = 0
       this.resolveQrWaiters()
-      this.logs.write('info', 'whatsapp', 'WhatsApp connected', { user: this.maskUser(this.socket?.user?.id) })
+      this.logs.write('info', 'whatsapp', 'WhatsApp connected', { user: this.maskUser(this.socket?.user?.id), sessionId: this.sessionId })
       return
     }
 
@@ -136,13 +137,14 @@ export class WhatsAppService {
     this.logs.write(loggedOut ? 'warn' : 'error', 'whatsapp', 'WhatsApp connection closed', {
       code,
       loggedOut,
-      error: this.lastError
+      error: this.lastError,
+      sessionId: this.sessionId
     })
 
     if (loggedOut) {
       this.status = 'logged_out'
       ++this.generation
-      this.authStore.clear()
+      this.authStore.clear(this.sessionId)
       this.scheduleReconnect(true)
       return
     }
@@ -193,17 +195,15 @@ export class WhatsAppService {
     return randBetween(this.cfg.messageDelayMinMs ?? 5000, this.cfg.messageDelayMaxMs ?? 9000)
   }
 
-  // every BURST_SIZE messages take a longer breather, like a human would
   burstPauseMs() {
     const size = this.cfg.burstSize ?? 0
     if (!size || ++this.sentInBurst < size) return 0
     this.sentInBurst = 0
     const pause = randBetween(this.cfg.burstPauseMinMs ?? 30000, this.cfg.burstPauseMaxMs ?? 60000)
-    this.logs.write('info', 'whatsapp', 'anti-ban burst cool-down', { pauseMs: pause, afterMessages: size })
+    this.logs.write('info', 'whatsapp', 'anti-ban burst cool-down', { pauseMs: pause, afterMessages: size, sessionId: this.sessionId })
     return pause
   }
 
-  // show "typing…" briefly before sending, scaled to message length
   async simulateTyping(jid, content) {
     if (!this.cfg.typingSimulation) return
     try {
@@ -219,11 +219,12 @@ export class WhatsAppService {
   }
 
   sentToday() {
-    return this.messages.countSince(this.todayStartIso())
+    return this.messages.countSince(this.sessionId, this.todayStartIso())
   }
 
   getStatus() {
     return {
+      sessionId: this.sessionId,
       status: this.status,
       connected: this.status === 'connected',
       user: this.status === 'connected' ? this.maskUser(this.socket?.user?.id) : null,
@@ -266,7 +267,7 @@ export class WhatsAppService {
       throw new AppError(429, 'DAILY_LIMIT_REACHED', `Daily send limit (${limit}) reached — protects the number from bans; resets at midnight UTC. Raise DAILY_SEND_LIMIT in .env if needed.`)
     }
     const recipient = await this.resolveRecipient(to)
-    const record = this.messages.create({ recipient, type, payload, apiKeyId })
+    const record = this.messages.create({ recipient, type, payload, apiKeyId, sessionId: this.sessionId })
     const queuedBehind = this.queue.size + this.queue.pending
 
     const markFailed = error => {
@@ -275,7 +276,8 @@ export class WhatsAppService {
         messageId: record.id,
         recipient: this.maskUser(recipient),
         type,
-        error: error.message
+        error: error.message,
+        sessionId: this.sessionId
       }, { apiKeyId })
     }
 
@@ -292,13 +294,12 @@ export class WhatsAppService {
         messageId: record.id,
         waMessageId: sent.waMessageId,
         recipient: this.maskUser(recipient),
-        type
+        type,
+        sessionId: this.sessionId
       }, { apiKeyId })
-      return { ...sent, recipient, type }
+      return { ...sent, recipient, type, sessionId: this.sessionId }
     })
 
-    // bulk requests would outwait the HTTP timeout behind the anti-ban gap;
-    // wait briefly, then hand back "queued" and let it send in the background
     let timer
     const winner = await Promise.race([
       task.then(result => ({ result }), error => ({ error })),
@@ -308,7 +309,7 @@ export class WhatsAppService {
 
     if (!winner) {
       task.then(() => {}, markFailed)
-      return { id: record.id, status: 'queued', recipient, type, queuedBehind }
+      return { id: record.id, status: 'queued', recipient, type, queuedBehind, sessionId: this.sessionId }
     }
     if (winner.error) {
       markFailed(winner.error)
@@ -331,9 +332,9 @@ export class WhatsAppService {
       await socket.logout().catch(error => this.logger.warn({ err: error }, 'socket logout failed'))
       socket.end(new Error('API logout'))
     }
-    this.authStore.clear()
+    this.authStore.clear(this.sessionId)
     this.reconnectAttempts = 0
-    this.logs.write('info', 'whatsapp', 'WhatsApp session logged out')
+    this.logs.write('info', 'whatsapp', 'WhatsApp session logged out', { sessionId: this.sessionId })
     await this.start()
     return this.getStatus()
   }
@@ -348,5 +349,113 @@ export class WhatsAppService {
     if (this.socket) this.socket.end(new Error('Server shutdown'))
     this.socket = null
     this.status = 'stopped'
+  }
+}
+
+export class WhatsAppService {
+  constructor({ authStore, messages, logs, logger, cfg }) {
+    this.authStore = authStore
+    this.messages = messages
+    this.logs = logs
+    this.logger = logger
+    this.cfg = cfg
+    this.sessions = new Map()
+  }
+
+  async start() {
+    let sessionIds = this.authStore.listSessions()
+    if (!sessionIds.length) {
+      sessionIds = ['main']
+    }
+
+    for (const sessionId of sessionIds) {
+      await this.createSession(sessionId).catch(error => {
+        this.logger.error({ err: error, sessionId }, 'Failed to auto-start WhatsApp session')
+      })
+    }
+  }
+
+  async createSession(sessionId) {
+    if (this.sessions.has(sessionId)) {
+      throw new AppError(409, 'SESSION_ALREADY_EXISTS', `WhatsApp session '${sessionId}' already exists`)
+    }
+    const session = new WhatsAppSession(sessionId, {
+      authStore: this.authStore,
+      messages: this.messages,
+      logs: this.logs,
+      logger: this.logger,
+      cfg: this.cfg
+    })
+    this.sessions.set(sessionId, session)
+    await session.start()
+    return session.getStatus()
+  }
+
+  async deleteSession(sessionId) {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new AppError(404, 'SESSION_NOT_FOUND', `WhatsApp session '${sessionId}' not found`)
+    }
+    await session.stop()
+    this.authStore.clear(sessionId)
+    this.sessions.delete(sessionId)
+    this.logs.write('info', 'whatsapp', 'WhatsApp session deleted', { sessionId })
+  }
+
+  getSession(sessionId) {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new AppError(404, 'SESSION_NOT_FOUND', `WhatsApp session '${sessionId}' not found`)
+    }
+    return session
+  }
+
+  listSessions() {
+    const list = []
+    for (const session of this.sessions.values()) {
+      list.push(session.getStatus())
+    }
+    return list
+  }
+
+  getStatus(sessionId = 'main') {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      return {
+        sessionId,
+        status: 'not_created',
+        connected: false,
+        user: null,
+        connectedAt: null,
+        qrAvailable: false,
+        qrExpiresAt: null,
+        reconnectAttempts: 0,
+        pendingMessages: 0,
+        queueGapMs: { min: this.cfg.messageDelayMinMs ?? 5000, max: this.cfg.messageDelayMaxMs ?? 9000 },
+        sentToday: 0,
+        dailyLimit: this.cfg.dailySendLimit ?? 0,
+        lastError: 'Session not initialized'
+      }
+    }
+    return session.getStatus()
+  }
+
+  async send({ sessionId = 'main', to, type, content, payload, apiKeyId }) {
+    const session = this.getSession(sessionId)
+    return session.send({ to, type, content, payload, apiKeyId })
+  }
+
+  async logout(sessionId = 'main') {
+    const session = this.getSession(sessionId)
+    return session.logout()
+  }
+
+  async stop() {
+    for (const session of this.sessions.values()) {
+      await session.stop().catch(error => {
+        this.logger.error({ err: error, sessionId: session.sessionId }, 'Failed to stop session')
+      })
+    }
+    this.sessions.clear()
   }
 }
