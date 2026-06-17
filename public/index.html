@@ -342,6 +342,38 @@
   .h-sub { font-size: 13.5px; font-weight: 700; color: var(--navy); margin: 18px 0 8px; display: flex; align-items: center; gap: 8px; }
   .h-sub:first-child { margin-top: 0; }
 
+  /* ===== card tabs ===== */
+  .card-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--line);
+    background: #f8fafc;
+  }
+  .card-tabs button {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 12px 16px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--muted);
+    transition: all .15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-bottom: 2px solid transparent;
+  }
+  .card-tabs button:hover {
+    color: var(--blue);
+    background: rgba(0, 0, 0, .02);
+  }
+  .card-tabs button.active {
+    color: var(--blue);
+    border-bottom-color: var(--blue);
+    background: #fff;
+  }
+
   /* ===== test send ===== */
   .test-grid { display: grid; grid-template-columns: 240px 1fr auto; gap: 12px; align-items: end; }
   .send-result { margin-top: 12px; }
@@ -574,19 +606,51 @@
 
         <!-- test send -->
         <div class="card" id="apiSection">
-          <div class="card-head"><i class="fa-solid fa-paper-plane"></i> Send a Test Message</div>
+          <div class="card-head"><i class="fa-solid fa-paper-plane"></i> Send Messages</div>
+          <div class="card-tabs">
+            <button class="active" id="btnSingleSendTab"><i class="fa-solid fa-user"></i> Single Recipient</button>
+            <button id="btnBulkSendTab"><i class="fa-solid fa-users"></i> Bulk Send</button>
+          </div>
           <div class="card-body">
-            <div class="test-grid">
-              <div class="field" style="margin:0">
-                <label><i class="fa-solid fa-phone"></i> Recipient (with country code)</label>
-                <input type="text" id="testTo" placeholder="923001234567" inputmode="numeric">
+            <!-- Single Recipient Form -->
+            <div id="formSingleSend">
+              <div class="test-grid">
+                <div class="field" style="margin:0">
+                  <label><i class="fa-solid fa-phone"></i> Recipient (with country code)</label>
+                  <input type="text" id="testTo" placeholder="923001234567" inputmode="numeric">
+                </div>
+                <div class="field" style="margin:0">
+                  <label><i class="fa-solid fa-message"></i> Message</label>
+                  <input type="text" id="testMsg" placeholder="Hello from my API!" maxlength="4096">
+                </div>
+                <button class="btn" id="testSendBtn"><i class="fa-solid fa-paper-plane"></i> Send</button>
               </div>
-              <div class="field" style="margin:0">
-                <label><i class="fa-solid fa-message"></i> Message</label>
-                <input type="text" id="testMsg" placeholder="Hello from my API!" maxlength="4096">
-              </div>
-              <button class="btn" id="testSendBtn"><i class="fa-solid fa-paper-plane"></i> Send</button>
             </div>
+
+            <!-- Bulk Send Form -->
+            <div id="formBulkSend" class="hidden">
+              <div class="field" style="margin-bottom: 14px;">
+                <label><i class="fa-solid fa-users"></i> Recipients (one number per line, country code, no +)</label>
+                <textarea id="bulkTo" rows="5" placeholder="923001234567&#10;923019876543" style="width:100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; resize: vertical; min-height: 100px; font-family: inherit;"></textarea>
+              </div>
+              
+              <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 18px; flex-wrap: wrap;">
+                <div class="field" style="margin:0; flex: 1; min-width: 200px;">
+                  <label><i class="fa-solid fa-file-csv"></i> Or Upload CSV / TXT file</label>
+                  <input type="file" id="bulkFile" accept=".csv,.txt" style="width: 100%; border: 1px dashed var(--line); border-radius: 8px; padding: 6px 12px; background: #fafbfc; cursor: pointer;">
+                </div>
+                <div id="bulkFileStatus" style="font-size: 13px; color: var(--muted); margin-top: 20px;"></div>
+              </div>
+
+              <div class="field" style="margin-bottom: 18px;">
+                <label><i class="fa-solid fa-message"></i> Message</label>
+                <input type="text" id="bulkMsg" placeholder="Enter your bulk message here..." maxlength="4096" style="width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;">
+              </div>
+
+              <button class="btn block" id="bulkSendBtn"><i class="fa-solid fa-paper-plane"></i> Queue Bulk Messages</button>
+            </div>
+
+            <!-- Common Result Alert -->
             <div class="send-result">
               <div class="alert" id="sendAlert"><i id="sendAlertIcon" class="fa-solid fa-circle-check"></i><span id="sendAlertText"></span></div>
             </div>
@@ -1314,6 +1378,113 @@
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send';
+    }
+  };
+
+  // ---- bulk send ----
+  $('btnSingleSendTab').onclick = () => {
+    $('btnSingleSendTab').classList.add('active');
+    $('btnBulkSendTab').classList.remove('active');
+    show($('formSingleSend'));
+    hide($('formBulkSend'));
+    $('sendAlert').className = 'alert';
+  };
+  $('btnBulkSendTab').onclick = () => {
+    $('btnBulkSendTab').classList.add('active');
+    $('btnSingleSendTab').classList.remove('active');
+    hide($('formSingleSend'));
+    show($('formBulkSend'));
+    $('sendAlert').className = 'alert';
+  };
+
+  // CSV/TXT File Parser
+  $('bulkFile').onchange = e => {
+    const file = e.target.files[0];
+    if (!file) {
+      $('bulkFileStatus').textContent = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = evt => {
+      const text = evt.target.result;
+      const found = [];
+      const lines = text.split(/\r?\n/);
+      for (let line of lines) {
+        const num = line.replace(/\D/g, '');
+        if (num.length >= 8 && num.length <= 15) {
+          found.push(num);
+        }
+      }
+      if (found.length) {
+        $('bulkTo').value = found.join('\n');
+        $('bulkFileStatus').innerHTML = '<span style="color:var(--green);font-weight:600;"><i class="fa-solid fa-check-double"></i> Loaded ' + found.length + ' numbers</span>';
+      } else {
+        $('bulkFileStatus').innerHTML = '<span style="color:var(--red)"><i class="fa-solid fa-xmark"></i> No valid numbers found.</span>';
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Bulk send action
+  $('bulkSendBtn').onclick = async () => {
+    const rawTo = $('bulkTo').value.trim();
+    const message = $('bulkMsg').value.trim();
+    const alertBox = $('sendAlert');
+    alertBox.className = 'alert';
+    
+    if (!rawTo || !message) {
+      alertBox.classList.add('show', 'error');
+      $('sendAlertIcon').className = 'fa-solid fa-circle-exclamation';
+      $('sendAlertText').textContent = 'Enter recipient numbers (or upload a file) and a message.';
+      return;
+    }
+
+    const recipients = rawTo.split(/[\n,;]+/).map(n => n.replace(/\D/g, '')).filter(n => n.length >= 8 && n.length <= 15);
+    if (!recipients.length) {
+      alertBox.classList.add('show', 'error');
+      $('sendAlertIcon').className = 'fa-solid fa-circle-exclamation';
+      $('sendAlertText').textContent = 'No valid recipient numbers found.';
+      return;
+    }
+
+    const btn = $('bulkSendBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch spin"></i> Queuing 0 / ' + recipients.length + '…';
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < recipients.length; i++) {
+      const to = recipients[i];
+      btn.innerHTML = '<i class="fa-solid fa-circle-notch spin"></i> Queuing ' + (i + 1) + ' / ' + recipients.length + '…';
+      try {
+        const { res, json } = await api('/api/send-message', { method: 'POST', body: JSON.stringify({ to, message }) });
+        if (res.ok && json.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (e) {
+        failCount++;
+      }
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Queue Bulk Messages';
+
+    alertBox.className = 'alert show ' + (failCount === 0 ? 'okay' : (successCount > 0 ? 'okay' : 'error'));
+    $('sendAlertIcon').className = failCount === 0 ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation';
+    $('sendAlertText').innerHTML = '<b>Bulk Queue Completed!</b><br>' + 
+      '<i class="fa-solid fa-check" style="color:var(--green)"></i> Successfully queued: <b>' + successCount + '</b><br>' +
+      (failCount > 0 ? '<i class="fa-solid fa-xmark" style="color:var(--red)"></i> Failed to queue: <b>' + failCount + '</b> (invalid format or server error)' : '') +
+      '<br><span style="font-size:12px;color:var(--muted);margin-top:6px;display:block;">The server will automatically send these queued messages one-by-one with anti-ban delay (5-9s). You can monitor progress on the <b>Message Queue</b> page.</span>';
+    
+    if (successCount > 0) {
+      $('bulkTo').value = '';
+      $('bulkMsg').value = '';
+      $('bulkFile').value = '';
+      $('bulkFileStatus').textContent = '';
+      tick(); // refresh status
     }
   };
 
