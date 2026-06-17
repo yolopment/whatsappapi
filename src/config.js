@@ -32,7 +32,7 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default('*'),
   API_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(900000),
   API_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(120),
-  ADMIN_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),
+  ADMIN_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(120),
   MAX_MEDIA_BYTES: z.coerce.number().int().min(1024).max(100 * 1024 * 1024).default(25 * 1024 * 1024),
   ALLOW_REMOTE_MEDIA: bool,
   REMOTE_MEDIA_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(15000),
