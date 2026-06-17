@@ -12,7 +12,7 @@ import express from 'express'
 import { rateLimit } from 'express-rate-limit'
 import helmet from 'helmet'
 import pinoHttp from 'pino-http'
-import { apiKeyAuth } from './middleware/auth.js'
+import { apiKeyAuth, enforceSessionRestriction } from './middleware/auth.js'
 import { errorHandler, notFound } from './middleware/error-handler.js'
 import { createAdminRouter } from './routes/admin.js'
 import { createMessagingRouter } from './routes/messaging.js'
@@ -115,6 +115,7 @@ export const createApp = ({ cfg, logger, logs, apiKeys, whatsapp }) => {
     skip: isMonitor
   }))
   app.use('/api', apiKeyAuth(apiKeys))
+  app.use('/api', enforceSessionRestriction)
   app.use('/api', limiter({
     windowMs: cfg.apiRateLimitWindowMs,
     limit: cfg.apiRateLimitMax,

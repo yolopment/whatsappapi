@@ -19,7 +19,8 @@ const schema = `
     created_at TEXT NOT NULL,
     last_used_at TEXT,
     expires_at TEXT,
-    revoked_at TEXT
+    revoked_at TEXT,
+    restricted_session_id TEXT
   );
 
   CREATE TABLE IF NOT EXISTS messages (
@@ -116,5 +117,6 @@ export const createDatabase = file => {
   db.exec(schema)
   addColumnIfMissing(db, 'messages', 'message_json', 'TEXT')
   addColumnIfMissing(db, 'messages', 'session_id', "TEXT NOT NULL DEFAULT 'main'")
+  addColumnIfMissing(db, 'api_keys', 'restricted_session_id', 'TEXT')
   return db
 }

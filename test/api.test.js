@@ -135,6 +135,35 @@ describe('Baileys API', () => {
     assert.equal(response.body.code, 'MEDIA_TYPE_UNSUPPORTED')
   })
 
+  it('enforces API key session restrictions', async () => {
+    const genResponse = await request(app)
+      .post('/api/admin/generate-key')
+      .set('x-api-key', bootstrap)
+      .send({ name: 'restricted client', role: 'api', restrictedSessionId: 'other-session' })
+      .expect(201)
+
+    const restrictedKey = genResponse.body.data.apiKey
+
+    await request(app)
+      .get('/api/status?sessionId=other-session')
+      .set('x-api-key', restrictedKey)
+      .expect(200)
+
+    const failResponse = await request(app)
+      .get('/api/status?sessionId=main')
+      .set('x-api-key', restrictedKey)
+      .expect(403)
+
+    assert.equal(failResponse.body.code, 'SESSION_RESTRICTED')
+
+    const failDefault = await request(app)
+      .get('/api/status')
+      .set('x-api-key', restrictedKey)
+      .expect(403)
+
+    assert.equal(failDefault.body.code, 'SESSION_RESTRICTED')
+  })
+
   it('revokes keys immediately', async () => {
     await request(app)
       .post('/api/admin/revoke-key')

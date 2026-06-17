@@ -14,7 +14,8 @@ import { ok } from '../utils/response.js'
 const generateSchema = z.object({
   name: z.string().trim().min(2).max(100),
   role: z.enum(['admin', 'api']).default('api'),
-  expiresAt: z.iso.datetime().nullable().optional()
+  expiresAt: z.string().datetime().nullable().optional(),
+  restrictedSessionId: z.string().trim().min(2).max(100).nullable().optional()
 }).refine(value => !value.expiresAt || Date.parse(value.expiresAt) > Date.now(), {
   message: 'expiresAt must be in the future',
   path: ['expiresAt']

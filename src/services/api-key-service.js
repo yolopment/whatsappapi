@@ -22,12 +22,12 @@ export class ApiKeyService {
     this.bootstrapKey = bootstrapKey
     this.logs = logs
     this.findByPrefix = db.prepare(`
-      SELECT id, name, key_prefix, key_hash, salt, role, created_at, last_used_at, expires_at, revoked_at
+      SELECT id, name, key_prefix, key_hash, salt, role, created_at, last_used_at, expires_at, revoked_at, restricted_session_id
       FROM api_keys WHERE key_prefix = ?
     `)
     this.insert = db.prepare(`
-      INSERT INTO api_keys (id, name, key_prefix, key_hash, salt, role, created_at, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO api_keys (id, name, key_prefix, key_hash, salt, role, created_at, expires_at, restricted_session_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     this.touch = db.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?')
     this.revokeStmt = db.prepare(`
@@ -35,7 +35,7 @@ export class ApiKeyService {
       WHERE (id = ? OR key_prefix = ?) AND revoked_at IS NULL
     `)
     this.listStmt = db.prepare(`
-      SELECT id, name, key_prefix AS prefix, role, created_at, last_used_at, expires_at, revoked_at
+      SELECT id, name, key_prefix AS prefix, role, created_at, last_used_at, expires_at, revoked_at, restricted_session_id
       FROM api_keys ORDER BY created_at DESC
     `)
   }
@@ -44,7 +44,7 @@ export class ApiKeyService {
     return createHmac('sha256', this.pepper).update(`${salt}:${secret}`).digest('hex')
   }
 
-  create({ name, role, expiresAt = null }) {
+  create({ name, role, expiresAt = null, restrictedSessionId = null }) {
     const id = randomUUID()
     const prefix = randomBytes(8).toString('hex')
     const secret = randomBytes(32).toString('base64url')
@@ -53,9 +53,9 @@ export class ApiKeyService {
     const createdAt = new Date().toISOString()
     const expiry = expiresAt ? new Date(expiresAt).toISOString() : null
 
-    this.insert.run(id, name, prefix, this.hash(secret, salt), salt, role, createdAt, expiry)
-    this.logs.write('info', 'auth', 'api key generated', { id, name, role, prefix, expiresAt: expiry })
-    return { id, name, role, prefix, apiKey: key, createdAt, expiresAt: expiry }
+    this.insert.run(id, name, prefix, this.hash(secret, salt), salt, role, createdAt, expiry, restrictedSessionId)
+    this.logs.write('info', 'auth', 'api key generated', { id, name, role, prefix, expiresAt: expiry, restrictedSessionId })
+    return { id, name, role, prefix, apiKey: key, createdAt, expiresAt: expiry, restrictedSessionId }
   }
 
   authenticate(key) {
@@ -82,7 +82,8 @@ export class ApiKeyService {
       name: row.name,
       role: row.role,
       prefix: row.key_prefix,
-      expiresAt: row.expires_at
+      expiresAt: row.expires_at,
+      restrictedSessionId: row.restricted_session_id
     }
   }
 

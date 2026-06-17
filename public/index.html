@@ -426,7 +426,7 @@
   .role-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
   .role-toggle button { background: #fff; border: none; padding: 11px 18px; font-size: 14px; cursor: pointer; color: var(--ink); }
   .role-toggle button.active { background: var(--blue); color: #fff; font-weight: 600; }
-  .gen-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: end; }
+  .gen-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: end; }
   .key-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
   .key-table th { text-align: left; padding: 9px 10px; background: var(--blue-soft); color: var(--navy); font-size: 12px; }
   .key-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); }
@@ -826,6 +826,9 @@
                 <div class="field" style="margin:0">
                   <input type="text" id="genKeyName" placeholder="e.g. my-shop-app" maxlength="100">
                 </div>
+                <div class="field" style="margin:0">
+                  <select id="genKeySession" style="border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; height: 42px; background:#fff; font-size:14px; color:var(--ink); min-width: 160px;"></select>
+                </div>
                 <div class="role-toggle" id="genKeyRole" data-role="api">
                   <button type="button" data-r="api" class="active">api</button>
                   <button type="button" data-r="admin">admin</button>
@@ -837,7 +840,7 @@
               <label style="display:block;font-size:13px;font-weight:600;margin:20px 0 4px;color:var(--navy)"><i class="fa-solid fa-list"></i> All keys</label>
               <div style="overflow-x:auto">
                 <table class="key-table">
-                  <thead><tr><th>Name</th><th>Prefix</th><th>Role</th><th>Last used</th><th>Status</th><th></th></tr></thead>
+                  <thead><tr><th>Name</th><th>Prefix</th><th>Role</th><th>Session</th><th>Last used</th><th>Status</th><th></th></tr></thead>
                   <tbody id="keyTableBody"></tbody>
                 </table>
               </div>
@@ -1089,6 +1092,12 @@
     $('queueSessionSelect').innerHTML = '<option value="">All Accounts</option>' + optionsHtml;
     if (prevQueueVal === '' || sessionsList.some(s => s.sessionId === prevQueueVal)) {
       $('queueSessionSelect').value = prevQueueVal;
+    }
+
+    const prevGenKeySessionVal = $('genKeySession').value;
+    $('genKeySession').innerHTML = '<option value="">All Accounts (Global)</option>' + optionsHtml;
+    if (prevGenKeySessionVal === '' || sessionsList.some(s => s.sessionId === prevGenKeySessionVal)) {
+      $('genKeySession').value = prevGenKeySessionVal;
     }
   };
 
@@ -1762,8 +1771,18 @@
   $('genKeyRole').addEventListener('click', e => {
     const b = e.target.closest('button[data-r]');
     if (!b) return;
-    $('genKeyRole').dataset.role = b.dataset.r;
+    const role = b.dataset.r;
+    $('genKeyRole').dataset.role = role;
     [...$('genKeyRole').children].forEach(c => c.classList.toggle('active', c === b));
+    
+    if (role === 'admin') {
+      $('genKeySession').value = '';
+      $('genKeySession').disabled = true;
+      $('genKeySession').style.opacity = '0.5';
+    } else {
+      $('genKeySession').disabled = false;
+      $('genKeySession').style.opacity = '1';
+    }
   });
 
   const loadKeyList = async () => {
@@ -1778,20 +1797,25 @@
           : '<span class="kbadge ok">active</span>';
         const used = k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : '—';
         const act = dead ? '' : '<button class="kbtn danger" data-revoke="' + k.prefix + '"><i class="fa-solid fa-ban"></i> Revoke</button>';
-        return '<tr><td>' + esc(k.name) + '</td><td><code>' + k.prefix + '</code></td><td>' + k.role + '</td><td>' + used + '</td><td>' + status + '</td><td>' + act + '</td></tr>';
-      }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No keys generated yet</td></tr>';
+        const sessionLabel = k.restricted_session_id ? '<code>' + esc(k.restricted_session_id) + '</code>' : '<span style="color:var(--muted)">Global</span>';
+        return '<tr><td>' + esc(k.name) + '</td><td><code>' + k.prefix + '</code></td><td>' + k.role + '</td><td>' + sessionLabel + '</td><td>' + used + '</td><td>' + status + '</td><td>' + act + '</td></tr>';
+      }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">No keys generated yet</td></tr>';
     } catch { /* not admin / network */ }
   };
 
   $('genKeyBtn').onclick = async () => {
     const name = $('genKeyName').value.trim();
     const role = $('genKeyRole').dataset.role;
+    const restrictedSessionId = $('genKeySession').value || null;
     if (name.length < 2) { alert('Enter a name (at least 2 characters).'); return; }
     const btn = $('genKeyBtn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-circle-notch spin"></i>';
     try {
-      const { res, json } = await api('/api/admin/generate-key', { method: 'POST', body: JSON.stringify({ name, role }) });
+      const { res, json } = await api('/api/admin/generate-key', {
+        method: 'POST',
+        body: JSON.stringify({ name, role, restrictedSessionId })
+      });
       if (!res.ok) {
         $('genResult').innerHTML = '<div class="alert error show"><i class="fa-solid fa-circle-exclamation"></i><span>' + esc(json.error || 'Failed to generate') + '</span></div>';
         return;

@@ -28,3 +28,29 @@ export const requireAdmin = (req, res, next) => {
   }
   next()
 }
+
+export const enforceSessionRestriction = (req, res, next) => {
+  if (req.apiKey && req.apiKey.role !== 'admin' && req.apiKey.restrictedSessionId) {
+    const sessionSpecificPaths = [
+      '/send-message',
+      '/send-image',
+      '/send-document',
+      '/send-audio',
+      '/send-location',
+      '/messages',
+      '/qr',
+      '/status',
+      '/logout'
+    ]
+    const path = req.path
+    const isSessionSpecific = sessionSpecificPaths.some(p => path === p || path.startsWith(p + '/'))
+
+    if (isSessionSpecific) {
+      const sessionId = req.body?.sessionId || req.query?.sessionId || req.params?.sessionId || 'main'
+      if (sessionId !== req.apiKey.restrictedSessionId) {
+        return next(new AppError(403, 'SESSION_RESTRICTED', `This API key is restricted to session '${req.apiKey.restrictedSessionId}'`))
+      }
+    }
+  }
+  next()
+}
