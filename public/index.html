@@ -1120,10 +1120,6 @@
     }).join('');
   };
 
-  let scanSessionId = '';
-  let scanQrTimer = null;
-  let scanQrExpiresAt = 0;
-
   window.showSessionQr = (sessionId) => {
     scanSessionId = sessionId;
     $('scanSessionName').textContent = sessionId;
